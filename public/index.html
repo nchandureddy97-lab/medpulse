@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedPulse | FHIR Patient Management</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Main Style -->
+    <link rel="stylesheet" href="/style.css">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar/Navbar -->
+        <aside class="sidebar">
+            <div class="logo-area">
+                <div class="logo-icon">
+                    <i data-lucide="activity"></i>
+                </div>
+                <h2>MedPulse</h2>
+            </div>
+            <nav class="nav-links">
+                <a href="#" class="nav-item active" id="nav-patients">
+                    <i data-lucide="users"></i>
+                    <span>Patients</span>
+                </a>
+                <a href="#" class="nav-item" id="nav-scheduler">
+                    <i data-lucide="calendar"></i>
+                    <span>Scheduler</span>
+                </a>
+                <a href="#" class="nav-item" id="nav-scribe">
+                    <i data-lucide="mic"></i>
+                    <span>AI Scribe</span>
+                </a>
+                <a href="#" class="nav-item" id="nav-system-status">
+                    <i data-lucide="server"></i>
+                    <span>FHIR Server</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <span class="version">v1.0.0</span>
+                <span class="status-indicator connected">Connected</span>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="app-header">
+                <div class="header-title">
+                    <h1>Patient Directory</h1>
+                    <p class="subtitle">FHIR R4 compliant record manager</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-primary" id="btn-create-patient">
+                        <i data-lucide="user-plus"></i>
+                        <span>New Patient</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Stats Ribbon -->
+            <section class="stats-ribbon">
+                <div class="stat-card">
+                    <div class="stat-icon icon-blue">
+                        <i data-lucide="users"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="stat-total">-</h3>
+                        <p>Total Patients</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon icon-pink">
+                        <i data-lucide="user"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="stat-female">-</h3>
+                        <p>Female</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon icon-blue-light">
+                        <i data-lucide="user"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="stat-male">-</h3>
+                        <p>Male</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon icon-gray">
+                        <i data-lucide="user-check"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="stat-other">-</h3>
+                        <p>Other / Unknown</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Controls and Filter Area -->
+            <section class="filter-controls">
+                <div class="search-box">
+                    <i data-lucide="search" class="search-icon"></i>
+                    <input type="text" id="search-input" placeholder="Search patients by name..." autocomplete="off">
+                    <button id="search-clear-btn" class="search-clear-btn hidden">
+                        <i data-lucide="x"></i>
+                    </button>
+                </div>
+                <div class="filter-actions">
+                    <button class="btn btn-secondary" id="btn-refresh">
+                        <i data-lucide="rotate-cw"></i>
+                        <span>Refresh</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Dashboard Content Grid (Directory + Alerts Sidebar) -->
+            <div class="dashboard-grid" id="patient-directory-section">
+                <!-- Directory Content Area (Left Column) -->
+                <section class="directory-container glass-card" id="patient-table-container">
+                    <!-- Loading Overlay -->
+                    <div id="loading-overlay" class="loading-overlay hidden">
+                        <div class="spinner"></div>
+                        <p>Fetching patient records...</p>
+                    </div>
+
+                    <!-- Error Indicator -->
+                    <div id="error-container" class="error-container hidden">
+                        <div class="error-icon">
+                            <i data-lucide="alert-triangle"></i>
+                        </div>
+                        <h3 id="error-title">Error Loading Data</h3>
+                        <p id="error-message">Unable to connect to the backend FHIR proxy server.</p>
+                        <button class="btn btn-primary" id="btn-error-retry">Retry Connection</button>
+                    </div>
+
+                    <!-- Table View -->
+                    <div class="table-responsive" id="table-wrapper">
+                        <table class="patient-table">
+                            <thead>
+                                <tr>
+                                    <th>Patient ID</th>
+                                    <th>Full Name</th>
+                                    <th>Gender</th>
+                                    <th>Date of Birth</th>
+                                    <th class="actions-col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="patient-list-body">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div id="empty-state" class="empty-state hidden">
+                        <div class="empty-icon">
+                            <i data-lucide="user-x"></i>
+                        </div>
+                        <h3>No Patients Found</h3>
+                        <p>No patients matched the criteria or the directory is empty.</p>
+                        <button class="btn btn-primary" id="btn-empty-create">Create a Patient</button>
+                    </div>
+                </section>
+
+                <!-- Clinical Alerts & Notification Sidebar (Right Column) -->
+                <aside class="alerts-sidebar glass-card">
+                    <header class="alerts-header">
+                        <div class="alerts-title-group">
+                            <i data-lucide="bell" class="alerts-icon"></i>
+                            <h3>Clinical Alerts</h3>
+                        </div>
+                        <button class="btn btn-secondary" id="btn-seed-alerts" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; border-radius: var(--radius-sm);">
+                            <i data-lucide="sparkles" style="width: 12px; height: 12px; margin-right: 2px;"></i>
+                            <span>Seed Alerts</span>
+                        </button>
+                    </header>
+                    <div class="alerts-list" id="alerts-list-container">
+                        <!-- Populated by JS -->
+                        <div class="alerts-empty-state" id="alerts-empty-view">
+                            <i data-lucide="check-circle-2"></i>
+                            <p>Your Inbox is Clear</p>
+                            <span class="alerts-subtext">Click "Seed Alerts" to test heuristics</span>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+
+            <!-- FHIR Server Details Area -->
+            <section class="directory-container glass-card hidden" id="fhir-server-section" style="padding: 2.25rem;">
+                <div class="server-details-header" style="margin-bottom: 2rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-default); padding-bottom: 1.5rem;">
+                    <div>
+                        <h2 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem;">FHIR Server Details</h2>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem;">Connected resource server configuration and metadata</p>
+                    </div>
+                    <span class="gender-badge gender-unknown" id="server-connection-badge">
+                        <i data-lucide="shield" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
+                        <span>Checking...</span>
+                    </span>
+                </div>
+                <div class="server-info-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                    <div style="background-color: #F9FAFB; padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                        <p style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem;">Proxy Endpoint</p>
+                        <p style="font-family: monospace; font-size: 1rem; color: var(--primary);">/api/fhir</p>
+                    </div>
+                    <div style="background-color: #F9FAFB; padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                        <p style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem;">Target FHIR Server URL</p>
+                        <p style="font-family: monospace; font-size: 0.9rem; word-break: break-all;" id="info-target-url">Loading...</p>
+                    </div>
+                    <div style="background-color: #F9FAFB; padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                        <p style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem;">FHIR Version</p>
+                        <p style="font-size: 1.1rem; font-weight: 700;" id="info-fhir-version">Loading...</p>
+                    </div>
+                    <div style="background-color: #F9FAFB; padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                        <p style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem;">Auth Status</p>
+                        <p style="font-size: 1.1rem; font-weight: 700; color: var(--success);" id="info-auth-status">Token Configured</p>
+                    </div>
+                </div>
+                <div class="metadata-wrapper" style="background-color: #F3F4F6; border-radius: var(--radius-md); border: 1px solid var(--border-default); padding: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3 style="font-size: 1.1rem; font-weight: 600;">Capability Statement</h3>
+                        <button class="btn btn-secondary" id="btn-toggle-raw-metadata" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                            <i data-lucide="code"></i> Show Raw JSON
+                        </button>
+                    </div>
+                    <div id="metadata-summary" style="font-size: 0.95rem; color: var(--text-secondary); line-height: 1.6;">
+                        <p style="margin-bottom: 0.5rem;"><strong>Publisher:</strong> <span id="meta-publisher">Loading...</span></p>
+                        <p style="margin-bottom: 0.5rem;"><strong>Software Name:</strong> <span id="meta-software-name">Loading...</span></p>
+                        <p style="margin-bottom: 0.5rem;"><strong>Software Version:</strong> <span id="meta-software-version">Loading...</span></p>
+                        <p style="margin-bottom: 0.5rem;"><strong>Allowed Resources:</strong> <span id="meta-resources">Loading...</span></p>
+                    </div>
+                    <div id="raw-metadata-container" class="hidden" style="margin-top: 1.5rem; border-top: 1px solid var(--border-default); padding-top: 1rem;">
+                        <pre style="background: #E5E7EB; padding: 1rem; border-radius: var(--radius-sm); overflow-x: auto; max-height: 250px; font-family: monospace; font-size: 0.8rem; color: #a7f3d0;" id="raw-metadata-text">Loading...</pre>
+                    </div>
+                </div>
+            </section>
+
+            </section>
+
+            <!-- Patient Scheduler Area -->
+            <section class="directory-container glass-card hidden" id="scheduler-section" style="padding: 2rem;">
+                <div class="server-details-header" style="margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-default); padding-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <h2 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem;">Patient Scheduler</h2>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem;">Manage patient appointments, timelines, and clinical slot bookings</p>
+                    </div>
+                    <button class="btn btn-primary" id="btn-schedule-appt">
+                        <i data-lucide="calendar-plus"></i>
+                        <span>Book Appointment</span>
+                    </button>
+                </div>
+                
+                <div class="scheduler-layout" style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
+                    <!-- Calendar Columns Grid (Left) -->
+                    <div class="calendar-grid-card" style="flex-grow: 1; flex-basis: 600px; display: flex; flex-direction: column; gap: 1rem;">
+                        <div class="calendar-nav-bar" style="display: flex; justify-content: space-between; align-items: center; background: #F3F4F6; padding: 0.75rem 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <button class="btn btn-secondary" id="btn-cal-prev" style="padding: 0.4rem; border-radius: 50%;"><i data-lucide="chevron-left" style="margin: 0;"></i></button>
+                                <button class="btn btn-secondary" id="btn-cal-next" style="padding: 0.4rem; border-radius: 50%;"><i data-lucide="chevron-right" style="margin: 0;"></i></button>
+                                <h3 id="calendar-month-year" style="font-size: 1.1rem; font-weight: 700; margin-left: 0.25rem; text-transform: uppercase;">May 2026</h3>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button class="btn btn-secondary" id="btn-cal-today" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Today</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Scrollable weekly grid container -->
+                        <div class="scheduler-scroll-container" style="overflow-x: auto; background: #F3F4F6; border: 1px solid var(--border-default); border-radius: var(--radius-md); position: relative; max-height: 520px;">
+                            <div class="weekly-calendar-grid" style="display: grid; grid-template-columns: 80px repeat(7, minmax(130px, 1fr)); border-collapse: collapse; min-width: 900px;">
+                                <!-- Time Grid Headers -->
+                                <div class="grid-header-cell" style="border-right: 1px solid var(--border-default); border-bottom: 2px solid var(--border-default); padding: 0.75rem; text-align: center; font-weight: 700; font-size: 0.75rem; color: var(--text-muted); background: #F3F4F6;">TIME</div>
+                                <div class="grid-header-cell" data-day="1" style="border-right: 1px solid var(--border-default); border-bottom: 2px solid var(--border-default); padding: 0.75rem; text-align: center; font-weight: 600; font-size: 0.8rem; background: #F8F9FA;"><div style="color: var(--text-secondary); font-size: 0.7rem; font-weight: 700;">MON</div><div class="day-num" style="font-size: 1.05rem; font-weight: 700; margin-top: 2px;">-</div></div>
+                                <div class="grid-header-cell" data-day="2" style="border-right: 1px solid var(--border-default); border-bottom: 2px solid var(--border-default); padding: 0.75rem; text-align: center; font-weight: 600; font-size: 0.8rem; background: #F8F9FA;"><div style="color: var(--text-secondary); font-size: 0.7rem; font-weight: 700;">TUE</div><div class="day-num" style="font-size: 1.05rem; font-weight: 700; margin-top: 2px;">-</div></div>
+                                <div class="grid-header-cell" data-day="3" style="border-right: 1px solid var(--border-default); border-bottom: 2px solid var(--border-default); padding: 0.75rem; text-align: center; font-weight: 600; font-size: 0.8rem; background: #F8F9FA;"><div style="color: var(--text-secondary); font-size: 0.7rem; font-weight: 700;">WED</div><div class="day-num" style="font-size: 1.05rem; font-weight: 700; margin-top: 2px;">-</div></div>
+                                <div class="grid-header-cell" data-day="4" style="border-right: 1px solid var(--border-default); border-bottom: 2px solid var(--border-default); padding: 0.75rem; text-align: center; font-weight: 600; font-size: 0.8rem; background: #F8F9FA;"><div style="color: var(--text-secondary); font-size: 0.7rem; font-weight: 700;">THU</div><div class="day-num" style="font-size: 1.05rem; font-weight: 700; margin-top: 2px;">-</div></div>
+                                <div class="grid-header-cell" data-day="5" style="border-right: 1px solid var(--border-default); border-bottom: 2px solid var(--border-default); padding: 0.75rem; text-align: center; font-weight: 600; font-size: 0.8rem; background: #F8F9FA;"><div style="color: var(--text-secondary); font-size: 0.7rem; font-weight: 700;">FRI</div><div class="day-num" style="font-size: 1.05rem; font-weight: 700; margin-top: 2px;">-</div></div>
+                                <div class="grid-header-cell" data-day="6" style="border-right: 1px solid var(--border-default); border-bottom: 2px solid var(--border-default); padding: 0.75rem; text-align: center; font-weight: 600; font-size: 0.8rem; background: #F3F4F6;"><div style="color: var(--text-secondary); font-size: 0.7rem; font-weight: 700; color: var(--text-muted);">SAT</div><div class="day-num" style="font-size: 1.05rem; font-weight: 700; margin-top: 2px; color: var(--text-secondary);">-</div></div>
+                                <div class="grid-header-cell" data-day="7" style="border-bottom: 2px solid var(--border-default); padding: 0.75rem; text-align: center; font-weight: 600; font-size: 0.8rem; background: #F3F4F6;"><div style="color: var(--text-secondary); font-size: 0.7rem; font-weight: 700; color: var(--text-muted);">SUN</div><div class="day-num" style="font-size: 1.05rem; font-weight: 700; margin-top: 2px; color: var(--text-secondary);">-</div></div>
+                                
+                                <!-- Render Grid slots dynamically in JS -->
+                                <div id="calendar-slots-body" style="display: contents;">
+                                    <!-- Populated by JS -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Daily Agenda Panel (Right) -->
+                    <div class="agenda-card glass-card" style="flex-grow: 1; flex-basis: 300px; max-width: 400px; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; border: 1px solid var(--border-default); background: #F9FAFB;">
+                        <div style="border-bottom: 1px solid var(--border-default); padding-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <i data-lucide="clock" style="color: var(--primary); width: 18px; height: 18px;"></i>
+                            <h4 id="agenda-date-title" style="font-size: 1.05rem; font-weight: 700; text-transform: uppercase;">TODAY'S SCHEDULE</h4>
+                        </div>
+                        
+                        <div id="agenda-items-list" style="display: flex; flex-direction: column; gap: 0.75rem; overflow-y: auto; max-height: 460px; padding-right: 4px;">
+                            <!-- Agenda cards go here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AI Scribe Dictation Workspace -->
+            <section class="directory-container glass-card hidden" id="scribe-section" style="padding: 2rem;">
+                <div class="server-details-header" style="margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-default); padding-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <h2 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem;">AI Clinical Scribe Workstation</h2>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem;">Record doctor-patient dialogue to auto-generate structured FHIR encounters, SOAP logs, and patient instructions</p>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
+                    <!-- Recording Control Panel (Left) -->
+                    <div style="flex-grow: 1; flex-basis: 320px; max-width: 400px; display: flex; flex-direction: column; gap: 1.25rem;">
+                        <!-- Select Patient Card -->
+                        <div class="glass-card" style="padding: 1.25rem; background: #F9FAFB; border: 1px solid var(--border-default); display: flex; flex-direction: column; gap: 0.75rem; overflow: visible; z-index: 10;">
+                            <h4 style="font-size: 0.95rem; font-weight: 700;">1. Target Patient Selection</h4>
+                            <div class="quick-switcher-container" style="position: relative; width: 100%;">
+                                <div class="search-box" style="margin: 0; width: 100%;">
+                                    <i data-lucide="search" class="search-icon" style="top: 50%; transform: translateY(-50%);"></i>
+                                    <input type="text" id="scribe-patient-input" placeholder="Select patient..." autocomplete="off" style="width: 100%; padding-left: 2.25rem; font-size: 0.85rem; height: 36px; background: #F3F4F6; border: 1px solid var(--border-default); border-radius: var(--radius-md); color: #111827; outline: none; transition: var(--transition-fast);">
+                                    <button id="scribe-patient-clear-btn" class="search-clear-btn hidden" style="right: 8px;">
+                                        <i data-lucide="x"></i>
+                                    </button>
+                                </div>
+                                <div id="scribe-patient-results" class="hidden" style="position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #FFFFFF; border: 1px solid 1px solid #D1D5DB; border-radius: var(--radius-md); box-shadow: 0 10px 30px rgba(0,0,0,0.1); backdrop-filter: blur(16px); z-index: 50; max-height: 200px; overflow-y: auto;">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+                            <div id="scribe-active-patient-card" class="hidden" style="margin-top: 0.5rem; background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--radius-sm); padding: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
+                                <div style="min-width: 0;">
+                                    <span id="scribe-active-patient-name" style="font-weight: 700; font-size: 0.85rem; display: block; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">Patient Name</span>
+                                    <span id="scribe-active-patient-dob" style="font-size: 0.7rem; color: var(--text-secondary); display: block;">DOB: -</span>
+                                </div>
+                                <button class="btn btn-secondary" id="btn-scribe-patient-deselect" style="padding: 0.25rem 0.5rem; font-size: 0.7rem; color: var(--danger); border-radius: var(--radius-sm);"><i data-lucide="trash-2" style="width:12px; height:12px; margin:0;"></i></button>
+                            </div>
+                        </div>
+                        
+                        <!-- Voice capture Card -->
+                        <div class="glass-card" style="padding: 1.5rem; background: #F9FAFB; border: 1px solid var(--border-default); display: flex; flex-direction: column; align-items: center; gap: 1rem; text-align: center; z-index: 1;">
+                            <h4 style="font-size: 0.95rem; font-weight: 700; width: 100%; text-align: left;">2. Audio Capture Controller</h4>
+                            
+                            <div style="margin: 1rem 0; position: relative; width: 110px; height: 110px; display: flex; align-items: center; justify-content: center;">
+                                <!-- Pulsing circle background for recording state -->
+                                <div id="scribe-pulse-bg" class="" style="position: absolute; width: 100%; height: 100%; border-radius: 50%; background-color: var(--danger); opacity: 0; pointer-events: none; transition: all 0.3s ease;"></div>
+                                <button id="btn-scribe-record" class="btn" style="width: 84px; height: 84px; border-radius: 50%; background: linear-gradient(135deg, var(--danger), #dc2626); color: white; border: none; font-size: 1.8rem; box-shadow: 0 4px 15px var(--danger-glow); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 2; transition: all 0.2s ease;">
+                                    <i data-lucide="mic" id="scribe-record-icon" style="width:32px; height:32px; margin:0;"></i>
+                                </button>
+                            </div>
+                            
+                            <div>
+                                <span id="scribe-status-badge" style="background: #F9FAFB; color: var(--text-secondary); border: 1px solid var(--border-default); padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 0.75rem; text-transform: uppercase;">IDLE</span>
+                                <div id="scribe-status-text" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem;">Configure a patient and hit Record to begin scribe.</div>
+                            </div>
+                            
+                            <!-- Sine Visualizer Waveform Canvas -->
+                            <div style="width: 100%; height: 45px; background: #F3F4F6; border-radius: var(--radius-sm); border: 1px solid var(--border-default); overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative;">
+                                <canvas id="scribe-waveform" style="width: 100%; height: 100%; position: absolute; top: 0; left: 0;"></canvas>
+                                <span id="scribe-waveform-placeholder" style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600; z-index: 1;">Microphone Signal Inactive</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Scribe Live Output Panel (Right) -->
+                    <div class="glass-card" style="flex-grow: 1; flex-basis: 500px; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem;">
+                        <div style="border-bottom: 1px solid var(--border-default); padding-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; justify-content: space-between;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <i data-lucide="file-audio" style="color: var(--primary); width: 18px; height: 18px;"></i>
+                                <h4 style="font-size: 1.05rem; font-weight: 700; color: #111827;">Scribe AI Workspace</h4>
+                            </div>
+                            <span id="scribe-duration-clock" style="font-family: monospace; font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">00:00</span>
+                        </div>
+                        
+                        <!-- Split Dialogue Screen & Result Panels -->
+                        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                            <!-- Dialogue Transcribing Box -->
+                            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Dialogue Audio Stream</span>
+                                    <span id="scribe-transcribing-indicator" class="hidden" style="font-size: 0.7rem; color: var(--danger); font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                                        <span class="spinner" style="width:8px; height:8px; border-width: 1px;"></span> Transcribing...
+                                    </span>
+                                </div>
+                                <div id="scribe-transcript-box" style="height: 140px; overflow-y: auto; background: #F0F2F5; border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: 0.75rem; font-size: 0.8rem; line-height: 1.5; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.50rem;">
+                                    <div style="text-align: center; color: var(--text-muted); margin-top: 2rem;">Scribe dialogue transcript is empty. Make sure a patient is selected and record standard conversation.</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Processing Spinner -->
+                            <div id="scribe-ai-processing" class="hidden" style="text-align: center; padding: 3rem 1rem; border: 1px dashed var(--border-default); border-radius: var(--radius-sm);">
+                                <div class="spinner" style="margin: 0 auto 1rem; width: 24px; height: 24px; border-width: 2.5px;"></div>
+                                <h5 style="font-weight: 600; font-size: 0.9rem;">Analysing Dictation Dialogue...</h5>
+                                <p style="font-size: 0.75rem; color: var(--text-muted); max-width: 280px; margin: 0.25rem auto 0;">Scribe models are identifying medical observations, conditions, and treatment protocols.</p>
+                            </div>
+                            
+                            <!-- Scribe Result Workspace Container -->
+                            <div id="scribe-result-workspace" class="hidden" style="display: flex; flex-direction: column; gap: 1rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-default); padding-bottom: 0.5rem;">
+                                    <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Extract Clinical Artifacts</span>
+                                    <span style="background: rgba(16, 185, 129, 0.1); color: var(--success); font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.2);">AI Summary Ready</span>
+                                </div>
+                                
+                                <!-- Tabs Navigation inside Scribe outputs -->
+                                <div class="scribe-result-tabs" style="display: flex; gap: 4px; background: #F3F4F6; padding: 3px; border-radius: 8px; border: 1px solid var(--border-default);">
+                                    <button class="scribe-result-tab-btn active" data-scribe-tab="scribe-tab-soap" style="flex-grow:1; text-align:center; font-size:0.75rem; padding: 6px; border:none; background:transparent; color:var(--text-secondary); font-weight:600; cursor:pointer; border-radius:6px; transition:all 0.2s;">SOAP Note</button>
+                                    <button class="scribe-result-tab-btn" data-scribe-tab="scribe-tab-instructions" style="flex-grow:1; text-align:center; font-size:0.75rem; padding: 6px; border:none; background:transparent; color:var(--text-secondary); font-weight:600; cursor:pointer; border-radius:6px; transition:all 0.2s;">Patient Care Plan</button>
+                                    <button class="scribe-result-tab-btn" data-scribe-tab="scribe-tab-billing" style="flex-grow:1; text-align:center; font-size:0.75rem; padding: 6px; border:none; background:transparent; color:var(--text-secondary); font-weight:600; cursor:pointer; border-radius:6px; transition:all 0.2s;">Clinical Billing Codes</button>
+                                </div>
+                                
+                                <!-- SOAP Tab -->
+                                <div class="scribe-result-panel" id="scribe-tab-soap" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                        <div>
+                                            <label style="font-size: 0.7rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 2px;">Subjective</label>
+                                            <textarea id="scribe-out-sub" style="width: 100%; height: 90px; background: #F3F4F6; border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: 0.5rem; font-size: 0.75rem; color: #111827; resize: none; font-family: var(--font-sans); outline: none;"></textarea>
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 0.7rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 2px;">Objective</label>
+                                            <textarea id="scribe-out-obj" style="width: 100%; height: 90px; background: #F3F4F6; border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: 0.5rem; font-size: 0.75rem; color: #111827; resize: none; font-family: var(--font-sans); outline: none;"></textarea>
+                                        </div>
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                        <div>
+                                            <label style="font-size: 0.7rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 2px;">Assessment</label>
+                                            <textarea id="scribe-out-ass" style="width: 100%; height: 90px; background: #F3F4F6; border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: 0.5rem; font-size: 0.75rem; color: #111827; resize: none; font-family: var(--font-sans); outline: none;"></textarea>
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 0.7rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 2px;">Plan</label>
+                                            <textarea id="scribe-out-plan" style="width: 100%; height: 90px; background: #F3F4F6; border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: 0.5rem; font-size: 0.75rem; color: #111827; resize: none; font-family: var(--font-sans); outline: none;"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Care Plan Tab -->
+                                <div class="scribe-result-panel hidden" id="scribe-tab-instructions">
+                                    <label style="font-size: 0.7rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 2px;">Patient Care Plan Instructions</label>
+                                    <textarea id="scribe-out-instr" style="width: 100%; height: 190px; background: #F3F4F6; border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: 0.6rem; font-size: 0.8rem; color: #111827; resize: none; font-family: var(--font-sans); outline: none; line-height: 1.4;"></textarea>
+                                </div>
+                                
+                                <!-- Billing Codes Tab -->
+                                <div class="scribe-result-panel hidden" id="scribe-tab-billing" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                    <div>
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                            <span style="font-size: 0.7rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted);">ICD-10 Diagnosis Codes</span>
+                                            <button type="button" id="btn-add-icd10-toggle" onclick="document.getElementById('icd10-add-row').classList.toggle('hidden')" style="background:none; border:1px solid rgba(245,158,11,0.3); color:var(--warning); font-size:0.7rem; padding:2px 8px; border-radius:var(--radius-sm); cursor:pointer; display:flex; align-items:center; gap:4px;">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                                Add Code
+                                            </button>
+                                        </div>
+                                        <div id="icd10-add-row" class="hidden" style="display:flex; gap:0.4rem; margin-bottom:0.5rem; align-items:center;">
+                                            <input type="text" id="icd10-new-code" placeholder="Code (e.g. E11.9)" style="width:100px; padding:0.35rem 0.5rem; font-size:0.78rem; background:#F0F2F5; border:1px solid var(--border-default); border-radius:var(--radius-sm); color: #111827;">
+                                            <input type="text" id="icd10-new-display" placeholder="Description (e.g. Type 2 Diabetes)" style="flex:1; padding:0.35rem 0.5rem; font-size:0.78rem; background:#F0F2F5; border:1px solid var(--border-default); border-radius:var(--radius-sm); color: #111827;">
+                                            <button type="button" id="btn-add-icd10" style="background:rgba(245,158,11,0.15); color:var(--warning); border:1px solid rgba(245,158,11,0.3); padding:0.35rem 0.65rem; border-radius:var(--radius-sm); cursor:pointer; font-size:0.75rem; font-weight:600; white-space:nowrap;">+ Add</button>
+                                        </div>
+                                        <div id="scribe-out-icd10" style="display: flex; flex-wrap: wrap; gap: 0.5rem; background: #F3F4F6; padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--border-default); min-height: 50px; align-items: center;">
+                                            <!-- ICD10 Tags go here -->
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                            <span style="font-size: 0.7rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted);">RxNorm Medication Codes</span>
+                                            <button type="button" id="btn-add-rxnorm-toggle" onclick="document.getElementById('rxnorm-add-row').classList.toggle('hidden')" style="background:none; border:1px solid rgba(16,185,129,0.3); color:var(--success); font-size:0.7rem; padding:2px 8px; border-radius:var(--radius-sm); cursor:pointer; display:flex; align-items:center; gap:4px;">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                                Add Code
+                                            </button>
+                                        </div>
+                                        <div id="rxnorm-add-row" class="hidden" style="display:flex; gap:0.4rem; margin-bottom:0.5rem; align-items:center;">
+                                            <input type="text" id="rxnorm-new-code" placeholder="Code (e.g. 861634)" style="width:100px; padding:0.35rem 0.5rem; font-size:0.78rem; background:#F0F2F5; border:1px solid var(--border-default); border-radius:var(--radius-sm); color: #111827;">
+                                            <input type="text" id="rxnorm-new-display" placeholder="Description (e.g. Lisinopril 10mg)" style="flex:1; padding:0.35rem 0.5rem; font-size:0.78rem; background:#F0F2F5; border:1px solid var(--border-default); border-radius:var(--radius-sm); color: #111827;">
+                                            <button type="button" id="btn-add-rxnorm" style="background:rgba(16,185,129,0.15); color:var(--success); border:1px solid rgba(16,185,129,0.3); padding:0.35rem 0.65rem; border-radius:var(--radius-sm); cursor:pointer; font-size:0.75rem; font-weight:600; white-space:nowrap;">+ Add</button>
+                                        </div>
+                                        <div id="scribe-out-rxnorm" style="display: flex; flex-wrap: wrap; gap: 0.5rem; background: #F3F4F6; padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--border-default); min-height: 50px; align-items: center;">
+                                            <!-- RxNorm Tags go here -->
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div style="display: flex; justify-content: flex-end; border-top: 1px solid var(--border-default); padding-top: 1rem; margin-top: 0.5rem;">
+                                    <button type="button" class="btn btn-primary" id="btn-scribe-commit" style="box-shadow: 0 4px 15px var(--success-glow); background: linear-gradient(135deg, var(--success), #059669);">
+                                        <i data-lucide="plus-circle"></i>
+                                        <span>Commit to Patient Record</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Patient Details Area -->
+            <section class="hidden" id="patient-details-section">
+                <!-- Back Header -->
+                <div class="details-back-header" style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <button class="btn btn-secondary" id="btn-back-to-directory">
+                        <i data-lucide="arrow-left"></i>
+                        <span>Back to Directory</span>
+                    </button>
+                    
+                    <!-- Quick Patient Switcher Search -->
+                    <div class="quick-switcher-container" style="position: relative; width: 280px;">
+                        <div class="search-box" style="margin: 0; width: 100%;">
+                            <i data-lucide="search" class="search-icon" style="top: 50%; transform: translateY(-50%);"></i>
+                            <input type="text" id="details-search-input" placeholder="Quick switch patient..." autocomplete="off" style="width: 100%; padding-left: 2.25rem; font-size: 0.85rem; height: 36px; background: #F3F4F6; border: 1px solid var(--border-default); border-radius: var(--radius-md); color: #111827; outline: none; transition: var(--transition-fast);">
+                            <button id="details-search-clear-btn" class="search-clear-btn hidden" style="right: 8px;">
+                                <i data-lucide="x"></i>
+                            </button>
+                        </div>
+                        <!-- Dropdown Results -->
+                        <div id="details-search-results" class="hidden" style="position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #FFFFFF; border: 1px solid 1px solid #D1D5DB; border-radius: var(--radius-md); box-shadow: 0 10px 30px rgba(0,0,0,0.1); backdrop-filter: blur(16px); z-index: 50; max-height: 250px; overflow-y: auto;">
+                            <!-- Results populated by JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Demographics Card -->
+                <div class="glass-card" style="padding: 2rem; margin-bottom: 2rem; display: flex; flex-wrap: wrap; gap: 2rem; align-items: center;">
+                    <div style="background: linear-gradient(135deg, var(--primary), #6366f1); color: white; width: 64px; height: 64px; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 20px var(--primary-glow);">
+                        <i data-lucide="user" style="width: 32px; height: 32px;"></i>
+                    </div>
+                    <div style="flex-grow: 1;">
+                        <h2 id="detail-patient-name" style="font-size: 1.8rem; font-weight: 700; margin-bottom: 0.25rem;">Loading Name...</h2>
+                        <p style="color: var(--text-muted); font-size: 0.9rem; font-family: monospace;">ID: <span id="detail-patient-id">-</span></p>
+                    </div>
+                    <div style="display: flex; gap: 1.5rem;">
+                        <div style="background-color: #F9FAFB; padding: 0.75rem 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                            <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 0.25rem;">Gender</span>
+                            <span id="detail-patient-gender" class="gender-badge gender-unknown" style="margin-top: 2px;">Unknown</span>
+                        </div>
+                        <div style="background-color: #F9FAFB; padding: 0.75rem 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                            <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 0.25rem;">Date of Birth</span>
+                            <span id="detail-patient-birthdate" style="font-weight: 600; font-size: 0.95rem;">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabs Navigation -->
+                <div class="details-tabs" style="display: flex; gap: 0.75rem; margin-bottom: 2rem; border-bottom: 1px solid var(--border-default); padding-bottom: 0.75rem; overflow-x: auto; -webkit-overflow-scrolling: touch;">
+                    <button class="tab-btn active" data-tab="tab-vitals" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.25rem; border: none; background: transparent; color: var(--text-secondary); font-family: var(--font-sans); font-size: 0.9rem; font-weight: 600; cursor: pointer; border-radius: var(--radius-md); transition: var(--transition-fast);">
+                        <i data-lucide="activity" style="width: 16px; height: 16px;"></i>
+                        <span>Vitals & EHR Records</span>
+                    </button>
+                    <button class="tab-btn" data-tab="tab-soap" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.25rem; border: none; background: transparent; color: var(--text-secondary); font-family: var(--font-sans); font-size: 0.9rem; font-weight: 600; cursor: pointer; border-radius: var(--radius-md); transition: var(--transition-fast);">
+                        <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
+                        <span>AI SOAP Summarizer</span>
+                    </button>
+                    <button class="tab-btn" data-tab="tab-cardiorisk" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.25rem; border: none; background: transparent; color: var(--text-secondary); font-family: var(--font-sans); font-size: 0.9rem; font-weight: 600; cursor: pointer; border-radius: var(--radius-md); transition: var(--transition-fast);">
+                        <i data-lucide="heart" style="width: 16px; height: 16px;"></i>
+                        <span>CardioRisk Console</span>
+                    </button>
+                    <button class="tab-btn" data-tab="tab-renalstager" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.25rem; border: none; background: transparent; color: var(--text-secondary); font-family: var(--font-sans); font-size: 0.9rem; font-weight: 600; cursor: pointer; border-radius: var(--radius-md); transition: var(--transition-fast);">
+                        <i data-lucide="droplet" style="width: 16px; height: 16px;"></i>
+                        <span>RenalStager Workstation</span>
+                    </button>
+                </div>
+
+                <!-- Tab Panels Container -->
+                <div class="details-tab-panels">
+                    
+                    <!-- Panel 1: Vitals & EHR Records -->
+                    <div class="tab-panel" id="tab-vitals">
+                        <!-- Vitals Segment -->
+                        <div class="glass-card" style="padding: 2.25rem; margin-bottom: 2rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-default); padding-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+                                <div>
+                                    <h3 style="font-size: 1.3rem; font-weight: 700; margin-bottom: 0.25rem;">Patient Vitals History</h3>
+                                    <p style="color: var(--text-secondary); font-size: 0.85rem;">Time-series vitals tracking over time</p>
+                                </div>
+                                
+                                <!-- Toggle Switch -->
+                                <div class="toggle-view-wrapper" style="display: flex; background: #F0F2F5; padding: 4px; border-radius: 20px; border: 1px solid var(--border-default);">
+                                    <button type="button" class="btn-toggle active" id="btn-toggle-charts" style="background: var(--primary); border: none; border-radius: 16px; color: white; padding: 4px 12px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: var(--transition-fast);">
+                                        <i data-lucide="line-chart" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle; display: inline-block;"></i> Charts
+                                    </button>
+                                    <button type="button" class="btn-toggle" id="btn-toggle-table" style="background: transparent; border: none; border-radius: 16px; color: var(--text-secondary); padding: 4px 12px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: var(--transition-fast);">
+                                        <i data-lucide="table" style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle; display: inline-block;"></i> Table
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Vitals Loading indicator -->
+                            <div id="vitals-loading" class="hidden" style="text-align: center; padding: 3rem;">
+                                <div class="spinner" style="margin: 0 auto 1rem;"></div>
+                                <p style="color: var(--text-secondary);">Querying patient vital observations...</p>
+                            </div>
+
+                            <!-- Vitals Empty view -->
+                            <div id="vitals-empty" class="empty-state hidden" style="padding: 3rem 1rem;">
+                                <div class="empty-icon"><i data-lucide="line-chart"></i></div>
+                                <h3>No Vital Observations Found</h3>
+                                <p>We couldn't retrieve any recorded vital observations for this patient.</p>
+                            </div>
+
+                            <!-- Chart View Container -->
+                            <div id="vitals-charts-view" class="vitals-charts-focused-container">
+                                <!-- Vitals Tabs Bar -->
+                                <div id="vitals-metric-tabs" class="vitals-metric-tabs">
+                                    <!-- Populated dynamically by JS -->
+                                </div>
+                                
+                                <!-- Focused Chart Card -->
+                                <div id="vitals-focused-card" class="vitals-focused-card">
+                                    <div class="vitals-focused-header">
+                                        <h4 id="vitals-focused-title" class="vitals-focused-title">SELECT A METRIC</h4>
+                                        <span id="vitals-focused-count" class="vitals-focused-count">0 readings</span>
+                                    </div>
+                                    <div class="vitals-focused-chart-container">
+                                        <canvas id="chart-vitals-focused"></canvas>
+                                    </div>
+                                    <div id="vitals-focused-legend" class="vitals-focused-legend">
+                                        <!-- Populated dynamically by JS -->
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Table View Container -->
+                            <div id="vitals-table-view" class="table-responsive hidden">
+                                <table class="patient-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Date & Time</th>
+                                            <th>Vital Sign</th>
+                                            <th>Reading Value</th>
+                                            <th>LOINC Code</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="vitals-table-body">
+                                        <!-- Populated by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Medical Profile Segment (Sub-Tabbed EHR Workstation) -->
+                        <div class="ehr-sub-workstation" style="margin-top: 2rem;">
+                            <!-- EHR Sub-Tabs & Chart Search -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-default); padding-bottom: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem; width: 100%;">
+                                <div class="ehr-sub-tabs-container" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; flex-grow: 1; min-width: 0;">
+                                    <div class="ehr-sub-tabs" style="display: flex; gap: 0.5rem;">
+                                        <button type="button" class="ehr-sub-tab active" data-subtab="subpanel-viewall">
+                                            <i data-lucide="layout-grid" style="color: var(--primary); width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
+                                            <span>Consolidated EHR Profile</span>
+                                        </button>
+                                        <button type="button" class="ehr-sub-tab" data-subtab="subpanel-conditions">
+                                            <i data-lucide="clipboard-list" style="color: var(--warning); width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
+                                            <span>Conditions</span>
+                                            <span class="sub-tab-badge" id="badge-conditions">0</span>
+                                        </button>
+                                        <button type="button" class="ehr-sub-tab" data-subtab="subpanel-medications">
+                                            <i data-lucide="pill" style="color: var(--success); width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
+                                            <span>Medications</span>
+                                            <span class="sub-tab-badge" id="badge-medications">0</span>
+                                        </button>
+                                        <button type="button" class="ehr-sub-tab" data-subtab="subpanel-immunizations">
+                                            <i data-lucide="shield-check" style="color: #6366f1; width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
+                                            <span>Immunizations</span>
+                                            <span class="sub-tab-badge" id="badge-immunizations">0</span>
+                                        </button>
+                                        <button type="button" class="ehr-sub-tab" data-subtab="subpanel-procedures">
+                                            <i data-lucide="scissors" style="color: #ec4899; width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
+                                            <span>Procedures</span>
+                                            <span class="sub-tab-badge" id="badge-procedures">0</span>
+                                        </button>
+                                        <button type="button" class="ehr-sub-tab" data-subtab="subpanel-reports">
+                                            <i data-lucide="file-text" style="color: #06b6d4; width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
+                                            <span>Diagnostic Reports</span>
+                                            <span class="sub-tab-badge" id="badge-reports">0</span>
+                                        </button>
+                                        <button type="button" class="ehr-sub-tab" data-subtab="subpanel-encounters">
+                                            <i data-lucide="calendar" style="color: #f59e0b; width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
+                                            <span>Encounters</span>
+                                            <span class="sub-tab-badge" id="badge-encounters">0</span>
+                                        </button>
+                                        <button type="button" class="ehr-sub-tab" data-subtab="subpanel-allergies">
+                                            <i data-lucide="alert-triangle" style="color: #ef4444; width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></i>
+                                            <span>Allergies</span>
+                                            <span class="sub-tab-badge" id="badge-allergies">0</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="chart-search-container" style="position: relative; width: 260px; flex-shrink: 0;">
+                                    <div class="search-box" style="margin: 0; width: 100%;">
+                                        <i data-lucide="search" class="search-icon" style="top: 50%; transform: translateY(-50%);"></i>
+                                        <input type="text" id="chart-search-input" placeholder="Search patient record..." autocomplete="off" style="width: 100%; padding-left: 2.25rem; font-size: 0.85rem; height: 32px; background: #F3F4F6; border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: #111827; outline: none; transition: var(--transition-fast);">
+                                        <button id="chart-search-clear-btn" class="search-clear-btn hidden" style="right: 8px;">
+                                            <i data-lucide="x"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- EHR Sub-Panels -->
+                            <div class="ehr-sub-panels glass-card" style="padding: 1.75rem;">
+                                <!-- Panel: Chart Search Results -->
+                                <div class="ehr-sub-panel hidden" id="subpanel-searchresults">
+                                    <div style="margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-default); padding-bottom: 0.5rem;">
+                                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                            <i data-lucide="search" style="color: var(--primary); width: 18px; height: 18px;"></i>
+                                            <h4 style="font-size: 1.05rem; font-weight: 700; color: var(--primary);">Chart Search Results</h4>
+                                        </div>
+                                        <span id="chart-search-count-badge" style="background-color: rgba(59,130,246,0.15); color: var(--primary); padding: 2px 10px; border-radius: 20px; font-weight: 700; font-size: 0.75rem; display: inline-flex; align-items: center; justify-content: center;">0 matches</span>
+                                    </div>
+                                    <div id="chart-search-results-list" style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 450px; overflow-y: auto; padding-right: 4px; padding-bottom: 0.5rem;">
+                                        <!-- Matching items go here -->
+                                    </div>
+                                </div>
+
+                                <!-- Panel: Consolidated EHR Profile -->
+                                <div class="ehr-sub-panel" id="subpanel-viewall">
+                                    <div class="viewall-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+                                        
+                                        <!-- Card: Conditions -->
+                                        <div class="viewall-card" style="background: #F9FAFB; border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                                            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-default); padding-bottom: 0.5rem;">
+                                                <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                                    <i data-lucide="clipboard-list" style="color: var(--warning); width: 16px; height: 16px;"></i>
+                                                    <h4 style="font-size: 0.95rem; font-weight: 700;">Active Conditions</h4>
+                                                </div>
+                                                <span class="sub-tab-badge" id="viewall-badge-conditions" style="background-color: rgba(245, 158, 11, 0.15); color: var(--warning);">0</span>
+                                            </div>
+                                            <div id="viewall-conditions-list" style="max-height: 220px; overflow-y: auto; font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 2px;">
+                                                <!-- Populated by JS -->
+                                            </div>
+                                        </div>
+
+                                        <!-- Card: Medications -->
+                                        <div class="viewall-card" style="background: #F9FAFB; border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                                            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-default); padding-bottom: 0.5rem;">
+                                                <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                                    <i data-lucide="pill" style="color: var(--success); width: 16px; height: 16px;"></i>
+                                                    <h4 style="font-size: 0.95rem; font-weight: 700;">Medications</h4>
+                                                </div>
+                                                <span class="sub-tab-badge" id="viewall-badge-medications" style="background-color: rgba(16, 185, 129, 0.15); color: var(--success);">0</span>
+                                            </div>
+                                            <div id="viewall-medications-list" style="max-height: 220px; overflow-y: auto; font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 2px;">
+                                                <!-- Populated by JS -->
+                                            </div>
+                                        </div>
+
+                                        <!-- Card: Allergies -->
+                                        <div class="viewall-card" style="background: #F9FAFB; border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                                            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-default); padding-bottom: 0.5rem;">
+                                                <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                                    <i data-lucide="alert-triangle" style="color: #ef4444; width: 16px; height: 16px;"></i>
+                                                    <h4 style="font-size: 0.95rem; font-weight: 700;">Allergies & Intolerances</h4>
+                                                </div>
+                                                <span class="sub-tab-badge" id="viewall-badge-allergies" style="background-color: rgba(239, 68, 68, 0.15); color: #ef4444;">0</span>
+                                            </div>
+                                            <div id="viewall-allergies-list" style="max-height: 220px; overflow-y: auto; font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 2px;">
+                                                <!-- Populated by JS -->
+                                            </div>
+                                        </div>
+
+                                        <!-- Card: Procedures -->
+                                        <div class="viewall-card" style="background: #F9FAFB; border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                                            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-default); padding-bottom: 0.5rem;">
+                                                <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                                    <i data-lucide="scissors" style="color: #ec4899; width: 16px; height: 16px;"></i>
+                                                    <h4 style="font-size: 0.95rem; font-weight: 700;">Procedures</h4>
+                                                </div>
+                                                <span class="sub-tab-badge" id="viewall-badge-procedures" style="background-color: rgba(236, 72, 153, 0.15); color: #ec4899;">0</span>
+                                            </div>
+                                            <div id="viewall-procedures-list" style="max-height: 220px; overflow-y: auto; font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 2px;">
+                                                <!-- Populated by JS -->
+                                            </div>
+                                        </div>
+
+                                        <!-- Card: Immunizations -->
+                                        <div class="viewall-card" style="background: #F9FAFB; border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                                            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-default); padding-bottom: 0.5rem;">
+                                                <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                                    <i data-lucide="shield-check" style="color: #6366f1; width: 16px; height: 16px;"></i>
+                                                    <h4 style="font-size: 0.95rem; font-weight: 700;">Immunizations</h4>
+                                                </div>
+                                                <span class="sub-tab-badge" id="viewall-badge-immunizations" style="background-color: rgba(99, 102, 241, 0.15); color: #6366f1;">0</span>
+                                            </div>
+                                            <div id="viewall-immunizations-list" style="max-height: 220px; overflow-y: auto; font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 2px;">
+                                                <!-- Populated by JS -->
+                                            </div>
+                                        </div>
+
+                                        <!-- Card: Diagnostic Reports -->
+                                        <div class="viewall-card" style="background: #F9FAFB; border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                                            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-default); padding-bottom: 0.5rem;">
+                                                <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                                    <i data-lucide="file-text" style="color: #06b6d4; width: 16px; height: 16px;"></i>
+                                                    <h4 style="font-size: 0.95rem; font-weight: 700;">Diagnostic Reports</h4>
+                                                </div>
+                                                <span class="sub-tab-badge" id="viewall-badge-reports" style="background-color: rgba(6, 182, 212, 0.15); color: #06b6d4;">0</span>
+                                            </div>
+                                            <div id="viewall-reports-list" style="max-height: 220px; overflow-y: auto; font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 2px;">
+                                                <!-- Populated by JS -->
+                                            </div>
+                                        </div>
+
+                                        <!-- Card: Recent Encounters -->
+                                        <div class="viewall-card" style="background: #F9FAFB; border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                                            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-default); padding-bottom: 0.5rem;">
+                                                <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                                    <i data-lucide="calendar" style="color: #f59e0b; width: 16px; height: 16px;"></i>
+                                                    <h4 style="font-size: 0.95rem; font-weight: 700;">Recent Encounters</h4>
+                                                </div>
+                                                <span class="sub-tab-badge" id="viewall-badge-encounters" style="background-color: rgba(245, 158, 11, 0.15); color: #f59e0b;">0</span>
+                                            </div>
+                                            <div id="viewall-encounters-list" style="max-height: 220px; overflow-y: auto; font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; padding-right: 2px;">
+                                                <!-- Populated by JS -->
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+
+                                <!-- Panel: Conditions -->
+                                <div class="ehr-sub-panel hidden" id="subpanel-conditions">
+                                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                                        <table class="patient-table" style="font-size: 0.9rem;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Condition Name</th>
+                                                    <th>Onset / Recorded Date</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="conditions-list-body">
+                                                <!-- Populated by JS -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div id="conditions-empty" class="hidden" style="text-align: center; padding: 2rem 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                                        No recorded conditions found.
+                                    </div>
+                                </div>
+
+                                <!-- Panel: Medications -->
+                                <div class="ehr-sub-panel hidden" id="subpanel-medications">
+                                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                                        <table class="patient-table" style="font-size: 0.9rem;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Medication Name</th>
+                                                    <th>Status</th>
+                                                    <th>Authored On</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="medications-list-body">
+                                                <!-- Populated by JS -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div id="medications-empty" class="hidden" style="text-align: center; padding: 2rem 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                                        No active medication requests found.
+                                    </div>
+                                </div>
+
+                                <!-- Panel: Immunizations -->
+                                <div class="ehr-sub-panel hidden" id="subpanel-immunizations">
+                                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                                        <table class="patient-table" style="font-size: 0.9rem;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Vaccine</th>
+                                                    <th>Administered Date</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="immunizations-list-body">
+                                                <!-- Populated by JS -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div id="immunizations-empty" class="hidden" style="text-align: center; padding: 2rem 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                                        No recorded immunizations found.
+                                    </div>
+                                </div>
+
+                                <!-- Panel: Procedures -->
+                                <div class="ehr-sub-panel hidden" id="subpanel-procedures">
+                                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                                        <table class="patient-table" style="font-size: 0.9rem;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Procedure Description</th>
+                                                    <th>Performed Date</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="procedures-list-body">
+                                                <!-- Populated by JS -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div id="procedures-empty" class="hidden" style="text-align: center; padding: 2rem 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                                        No recorded procedures found.
+                                    </div>
+                                </div>
+
+                                <!-- Panel: Diagnostic Reports -->
+                                <div class="ehr-sub-panel hidden" id="subpanel-reports">
+                                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                                        <table class="patient-table" style="font-size: 0.9rem;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Report Name</th>
+                                                    <th>Category</th>
+                                                    <th>Issued Date</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="reports-list-body">
+                                                <!-- Populated by JS -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div id="reports-empty" class="hidden" style="text-align: center; padding: 2rem 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                                        No diagnostic reports found.
+                                    </div>
+                                </div>
+
+                                <!-- Panel: Encounters -->
+                                <div class="ehr-sub-panel hidden" id="subpanel-encounters">
+                                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                                        <table class="patient-table" style="font-size: 0.9rem;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Encounter Type</th>
+                                                    <th>Visit Date</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="encounters-list-body">
+                                                <!-- Populated by JS -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div id="encounters-empty" class="hidden" style="text-align: center; padding: 2rem 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                                        No encounters recorded.
+                                    </div>
+                                </div>
+
+                                <!-- Panel: Allergies -->
+                                <div class="ehr-sub-panel hidden" id="subpanel-allergies">
+                                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                                        <table class="patient-table" style="font-size: 0.9rem;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Substance</th>
+                                                    <th>Category</th>
+                                                    <th>Criticality</th>
+                                                    <th>Manifestation</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="allergies-list-body">
+                                                <!-- Populated by JS -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div id="allergies-empty" class="hidden" style="text-align: center; padding: 2rem 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                                        No known allergies or intolerances recorded.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel 2: AI SOAP Workspace -->
+                    <div class="tab-panel hidden" id="tab-soap">
+                        <div class="soap-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+                            <!-- Input Note Area -->
+                            <div class="glass-card soap-input-card" style="padding: 1.75rem; display: flex; flex-direction: column; gap: 1rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--border-default); padding-bottom: 0.75rem;">
+                                    <i data-lucide="pen-tool" style="color: var(--primary); width: 22px; height: 22px;"></i>
+                                    <h3 style="font-size: 1.15rem; font-weight: 700;">SOAP Clinical Note Workspace</h3>
+                                </div>
+                                <div>
+                                    <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 1rem;">
+                                        Paste unstructured SOAP notes here (including vitals, prescriptions, or symptoms) to parse and generate a structured clinical summary, recommendations, and patient-friendly translation.
+                                    </p>
+                                    <textarea id="soap-textarea" style="width: 100%; height: 260px; background-color: #F3F4F6; border: 1px solid var(--border-default); border-radius: var(--radius-md); color: #111827; padding: 0.75rem; font-family: var(--font-sans); font-size: 0.9rem; outline: none; transition: var(--transition-fast); resize: none; line-height: 1.6;" placeholder="Paste professional clinical notes here, including LOINC vitals, RxNorm medications, and clinical assessments..."></textarea>
+                                </div>
+                                <div style="margin-top: auto;">
+                                    <button class="btn btn-primary" id="btn-generate-soap" style="width: 100%;">
+                                        <i data-lucide="sparkles"></i>
+                                        <span>Generate AI Summary & Translate</span>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Output AI Summaries -->
+                            <div class="soap-outputs" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                                <!-- Loading State -->
+                                <div id="soap-loading" class="glass-card hidden" style="padding: 3rem; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; min-height: 350px;">
+                                    <div class="spinner"></div>
+                                    <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--primary);">AI Summarizer Running...</h3>
+                                    <p style="color: var(--text-secondary); font-size: 0.85rem;">Domain Expert agent translating SOAP jargon...</p>
+                                </div>
+                                
+                                <!-- Results Wrapper -->
+                                <div id="soap-results" class="hidden" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                                    <!-- SOAP Summary Output -->
+                                    <div class="glass-card" style="padding: 1.75rem;">
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--border-default); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                                            <i data-lucide="file-check" style="color: var(--success); width: 20px; height: 20px;"></i>
+                                            <h3 style="font-size: 1.1rem; font-weight: 700;">Clinical SOAP Summary</h3>
+                                        </div>
+                                        <div class="soap-result-body" style="display: flex; flex-direction: column; gap: 1rem; font-size: 0.9rem;">
+                                            <div>
+                                                <h4 style="color: var(--primary); font-weight: 700; font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.25rem;">Subjective</h4>
+                                                <p id="soap-out-subjective" style="color: #111827; line-height: 1.5;">-</p>
+                                            </div>
+                                            <div>
+                                                <h4 style="color: var(--primary); font-weight: 700; font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.25rem;">Objective</h4>
+                                                <p id="soap-out-objective" style="color: #111827; line-height: 1.5;">-</p>
+                                            </div>
+                                            <div>
+                                                <h4 style="color: var(--primary); font-weight: 700; font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.25rem;">Assessment</h4>
+                                                <p id="soap-out-assessment" style="color: #111827; line-height: 1.5;">-</p>
+                                            </div>
+                                            <div>
+                                                <h4 style="color: var(--primary); font-weight: 700; font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.25rem;">Plan</h4>
+                                                <p id="soap-out-plan" style="color: #111827; line-height: 1.5;">-</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Patient Plain Language translation -->
+                                    <div class="glass-card" style="padding: 1.75rem;">
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--border-default); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                                            <i data-lucide="languages" style="color: var(--warning); width: 20px; height: 20px;"></i>
+                                            <h3 style="font-size: 1.1rem; font-weight: 700;">Plain-Language Summary (Patient Translation)</h3>
+                                        </div>
+                                        <p id="soap-out-translation" style="line-height: 1.6; color: #111827; font-size: 0.95rem; font-style: italic;">-</p>
+                                    </div>
+
+                                    <!-- Clinical Recommendation -->
+                                    <div class="glass-card" style="padding: 1.75rem;">
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--border-default); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                                            <i data-lucide="alert-circle" style="color: var(--danger); width: 20px; height: 20px;"></i>
+                                            <h3 style="font-size: 1.1rem; font-weight: 700;">Clinical Recommendations</h3>
+                                        </div>
+                                        <ul id="soap-out-recommendations" style="padding-left: 1.25rem; line-height: 1.6; color: var(--text-secondary); font-size: 0.95rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                                            <!-- Populated by JS -->
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                <!-- Empty State -->
+                                <div id="soap-empty" class="glass-card" style="padding: 4rem 2rem; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; min-height: 350px; border: 1px dashed var(--border-default);">
+                                    <i data-lucide="file-text" style="width: 48px; height: 48px; color: var(--text-muted);"></i>
+                                    <h3 style="font-size: 1.15rem; font-weight: 700; color: #111827;">No SOAP Notes Summarized</h3>
+                                    <p style="color: var(--text-secondary); font-size: 0.9rem; max-width: 320px; line-height: 1.5;">Submit a clinical note on the left workspace to produce the simplified summary.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel 3: CardioRisk Console -->
+                    <div class="tab-panel hidden" id="tab-cardiorisk">
+                        <div class="cardiorisk-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+                            <!-- ASCVD Parameters Form (Left) -->
+                            <div class="glass-card" style="padding: 1.75rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--border-default); padding-bottom: 0.75rem; margin-bottom: 1.25rem;">
+                                    <i data-lucide="sliders" style="color: var(--primary); width: 22px; height: 22px;"></i>
+                                    <h3 style="font-size: 1.15rem; font-weight: 700;">ASCVD Calculator Inputs</h3>
+                                </div>
+                                <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                                    <!-- Total Cholesterol -->
+                                    <div class="form-group-slider">
+                                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">
+                                            <label for="slider-total-chol">Total Cholesterol (mg/dL)</label>
+                                            <span id="val-total-chol" style="color: var(--primary);">200</span>
+                                        </div>
+                                        <input type="range" id="slider-total-chol" min="130" max="320" value="200" style="width:100%; cursor:pointer;">
+                                    </div>
+                                    
+                                    <!-- HDL Cholesterol -->
+                                    <div class="form-group-slider">
+                                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">
+                                            <label for="slider-hdl-chol">HDL Cholesterol (mg/dL)</label>
+                                            <span id="val-hdl-chol" style="color: var(--primary);">50</span>
+                                        </div>
+                                        <input type="range" id="slider-hdl-chol" min="20" max="100" value="50" style="width:100%; cursor:pointer;">
+                                    </div>
+
+                                    <!-- On BP Treatment -->
+                                    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                        <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">BP Treatment / Lifestyle Status</span>
+                                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem; color: #111827;">
+                                            <input type="checkbox" id="check-bp-treatment" style="width: auto; margin-right: 2px;">
+                                            <span>Currently Treated for Hypertension</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem; color: #111827;">
+                                            <input type="checkbox" id="check-smoker" style="width: auto; margin-right: 2px;">
+                                            <span>Current Smoker</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem; color: #111827;">
+                                            <input type="checkbox" id="check-diabetes" style="width: auto; margin-right: 2px;">
+                                            <span>Diagnosed with Diabetes</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ASCVD Score Gauge & Recommendations (Right) -->
+                            <div class="glass-card" style="padding: 1.75rem; display: flex; flex-direction: column; gap: 1.25rem; align-items: center; justify-content: center; text-align: center;">
+                                <div style="width: 100%; display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--border-default); padding-bottom: 0.75rem; text-align: left;">
+                                    <i data-lucide="shield-alert" style="color: var(--warning); width: 22px; height: 22px;"></i>
+                                    <h3 style="font-size: 1.15rem; font-weight: 700; margin: 0;">10-Year ASCVD Risk Score</h3>
+                                </div>
+
+                                <!-- Circular Gauge -->
+                                <div style="width: 140px; height: 140px; position: relative; margin-top: 1rem;">
+                                    <svg width="140" height="140" viewBox="0 0 140 140">
+                                        <circle cx="70" cy="70" r="58" fill="none" stroke="#F9FAFB" stroke-width="8"/>
+                                        <circle cx="70" cy="70" r="58" fill="none" stroke="var(--primary)" stroke-width="8" 
+                                                stroke-dasharray="364.42" stroke-dashoffset="364.42" id="ascvd-gauge-progress" style="transition: stroke-dashoffset 0.4s ease, stroke 0.4s ease; transform: rotate(-90deg); transform-origin: 50% 50%;"/>
+                                    </svg>
+                                    <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1;">
+                                        <span id="ascvd-score-percent" style="font-weight: 800; font-size: 2.2rem; color: #111827;">0%</span>
+                                        <span style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">ASCVD Risk</span>
+                                    </div>
+                                </div>
+
+                                <div style="width: 100%;">
+                                    <span id="ascvd-risk-level-badge" class="gender-badge gender-unknown" style="font-size: 0.85rem; padding: 0.35rem 1rem;">Calculating...</span>
+                                </div>
+
+                                <!-- Clinical Recommendations -->
+                                <div style="background-color: #F9FAFB; border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 1rem; width: 100%; text-align: left; font-size: 0.85rem; line-height: 1.5; color: var(--text-secondary);">
+                                    <p style="margin-bottom: 0.5rem;"><strong style="color: #111827;">Statin Recommendation:</strong> <span id="cardio-statin-recommendation">-</span></p>
+                                    <p style="margin-bottom: 0.5rem;"><strong style="color: #111827;">Coronary Calcium (CAC) Scan:</strong> <span id="cardio-cac-recommendation">-</span></p>
+                                    <p><strong style="color: #111827;">BP Target Goal:</strong> <span id="cardio-bp-goal">-</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel 4: RenalStager Workstation -->
+                    <div class="tab-panel hidden" id="tab-renalstager">
+                        <div class="renalstager-layout" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                            <!-- Top Grid: KDIGO Staging and Controls -->
+                            <div class="renalstager-top-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+                                <!-- Controls & Staging (Left) -->
+                                <div class="glass-card" style="padding: 1.75rem; display: flex; flex-direction: column; gap: 1.25rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--border-default); padding-bottom: 0.75rem;">
+                                        <i data-lucide="sliders" style="color: var(--primary); width: 22px; height: 22px;"></i>
+                                        <h3 style="font-size: 1.15rem; font-weight: 700;">Kidney Staging Inputs</h3>
+                                    </div>
+                                    
+                                    <!-- eGFR Value Slider -->
+                                    <div class="form-group-slider">
+                                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">
+                                            <label for="slider-egfr">Estimated GFR (mL/min/1.73m²)</label>
+                                            <span id="val-egfr" style="color: var(--primary);">90</span>
+                                        </div>
+                                        <input type="range" id="slider-egfr" min="5" max="120" value="90" style="width:100%; cursor:pointer;">
+                                    </div>
+
+                                    <!-- UACR Value Slider -->
+                                    <div class="form-group-slider">
+                                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">
+                                            <label for="slider-uacr">Urine Albumin-to-Creatinine Ratio (mg/g)</label>
+                                            <span id="val-uacr" style="color: var(--primary);">10</span>
+                                        </div>
+                                        <input type="range" id="slider-uacr" min="5" max="1000" value="10" style="width:100%; cursor:pointer;">
+                                    </div>
+
+                                    <!-- KDIGO Risk Staging Card -->
+                                    <div style="background-color: #F9FAFB; border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 1rem; font-size: 0.85rem; line-height: 1.5; color: var(--text-secondary);">
+                                        <p style="margin-bottom: 0.5rem;"><strong style="color: #111827;">Classification Stage:</strong> <span id="renal-classification-stage">-</span></p>
+                                        <p style="margin-bottom: 0.5rem;"><strong style="color: #111827;">Progression Risk:</strong> <span id="renal-progression-risk">-</span></p>
+                                        <p><strong style="color: #111827;">Action Protocol:</strong> <span id="renal-action-protocol">-</span></p>
+                                    </div>
+                                </div>
+
+                                <!-- KDIGO CKD Matrix Grid (Right) -->
+                                <div class="glass-card" style="padding: 1.75rem; display: flex; flex-direction: column;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--border-default); padding-bottom: 0.75rem; margin-bottom: 1.25rem;">
+                                        <i data-lucide="grid" style="color: var(--warning); width: 22px; height: 22px;"></i>
+                                        <h3 style="font-size: 1.15rem; font-weight: 700;">KDIGO Risk Staging Matrix</h3>
+                                    </div>
+                                    
+                                    <!-- Grid Matrix representation -->
+                                    <div class="kdigo-matrix-container">
+                                        <div class="kdigo-grid">
+                                            <!-- Headers -->
+                                            <div class="kdigo-header-cell">eGFR / UACR</div>
+                                            <div class="kdigo-header-cell">A1 (&lt;30)</div>
+                                            <div class="kdigo-header-cell">A2 (30-300)</div>
+                                            <div class="kdigo-header-cell">A3 (&gt;300)</div>
+
+                                            <!-- Row G1 -->
+                                            <div class="kdigo-header-cell vertical-header">G1 (&ge;90)</div>
+                                            <div class="kdigo-cell kdigo-green" id="kdigo-g1-a1">Low</div>
+                                            <div class="kdigo-cell kdigo-yellow" id="kdigo-g1-a2">Moderate</div>
+                                            <div class="kdigo-cell kdigo-orange" id="kdigo-g1-a3">High</div>
+
+                                            <!-- Row G2 -->
+                                            <div class="kdigo-header-cell vertical-header">G2 (60-89)</div>
+                                            <div class="kdigo-cell kdigo-green" id="kdigo-g2-a1">Low</div>
+                                            <div class="kdigo-cell kdigo-yellow" id="kdigo-g2-a2">Moderate</div>
+                                            <div class="kdigo-cell kdigo-orange" id="kdigo-g2-a3">High</div>
+
+                                            <!-- Row G3a -->
+                                            <div class="kdigo-header-cell vertical-header">G3a (45-59)</div>
+                                            <div class="kdigo-cell kdigo-yellow" id="kdigo-g3a-a1">Moderate</div>
+                                            <div class="kdigo-cell kdigo-orange" id="kdigo-g3a-a2">High</div>
+                                            <div class="kdigo-cell kdigo-red" id="kdigo-g3a-a3">Very High</div>
+
+                                            <!-- Row G3b -->
+                                            <div class="kdigo-header-cell vertical-header">G3b (30-44)</div>
+                                            <div class="kdigo-cell kdigo-orange" id="kdigo-g3b-a1">High</div>
+                                            <div class="kdigo-cell kdigo-red" id="kdigo-g3b-a2">Very High</div>
+                                            <div class="kdigo-cell kdigo-red" id="kdigo-g3b-a3">Very High</div>
+
+                                            <!-- Row G4 -->
+                                            <div class="kdigo-header-cell vertical-header">G4 (15-29)</div>
+                                            <div class="kdigo-cell kdigo-red" id="kdigo-g4-a1">Very High</div>
+                                            <div class="kdigo-cell kdigo-red" id="kdigo-g4-a2">Very High</div>
+                                            <div class="kdigo-cell kdigo-red" id="kdigo-g4-a3">Very High</div>
+
+                                            <!-- Row G5 -->
+                                            <div class="kdigo-header-cell vertical-header">G5 (&lt;15)</div>
+                                            <div class="kdigo-cell kdigo-red" id="kdigo-g5-a1">Very High</div>
+                                            <div class="kdigo-cell kdigo-red" id="kdigo-g5-a2">Very High</div>
+                                            <div class="kdigo-cell kdigo-red" id="kdigo-g5-a3">Very High</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Bottom Segment: eGFR decline simulator -->
+                            <div class="glass-card" style="padding: 2rem;">
+                                <div style="margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-default); padding-bottom: 0.75rem;">
+                                    <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 0.25rem;">5-Year eGFR Decline Prognosis Simulator</h3>
+                                    <p style="color: var(--text-secondary); font-size: 0.85rem;">Projected kidney function decline: Standard Treatment vs. Optimized SGLT2i/ACEi Therapy</p>
+                                </div>
+                                <div class="chart-container" style="height: 280px;">
+                                    <canvas id="chart-egfr-decline-simulator"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal Form (Create / Edit) -->
+    <div id="patient-modal" class="modal-backdrop hidden">
+        <div class="modal-container glass-card animate-zoom">
+            <header class="modal-header">
+                <h2 id="modal-title">Create Patient Record</h2>
+                <button class="modal-close" id="btn-modal-close">
+                    <i data-lucide="x"></i>
+                </button>
+            </header>
+            <form id="patient-form" novalidate>
+                <input type="hidden" id="patient-id" name="id">
+                
+                <div class="form-row">
+                    <div class="form-group col-6">
+                        <label for="given-name">Given Name <span class="required">*</span></label>
+                        <input type="text" id="given-name" name="givenName" required placeholder="e.g. John">
+                        <div class="error-hint" id="given-name-error">Given name is required.</div>
+                    </div>
+                    <div class="form-group col-6">
+                        <label for="family-name">Family Name <span class="required">*</span></label>
+                        <input type="text" id="family-name" name="familyName" required placeholder="e.g. Doe">
+                        <div class="error-hint" id="family-name-error">Family name is required.</div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group col-6">
+                        <label for="gender">Gender <span class="required">*</span></label>
+                        <div class="select-wrapper">
+                            <select id="gender" name="gender" required>
+                                <option value="" disabled selected>Select Gender</option>
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                                <option value="other">Other</option>
+                                <option value="unknown">Unknown</option>
+                            </select>
+                        </div>
+                        <div class="error-hint" id="gender-error">Please select a gender.</div>
+                    </div>
+                    <div class="form-group col-6">
+                        <label for="birth-date">Date of Birth <span class="required">*</span></label>
+                        <input type="date" id="birth-date" name="birthDate" required>
+                        <div class="error-hint" id="birth-date-error">Birth date cannot be in the future.</div>
+                    </div>
+                </div>
+
+                <footer class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="btn-modal-cancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btn-modal-submit">
+                        <i data-lucide="check"></i>
+                        <span>Save Record</span>
+                    </button>
+                </footer>
+            </form>
+        </div>
+    </div>
+
+    <!-- Appointment Booking Modal -->
+    <div id="appointment-modal" class="modal-backdrop hidden">
+        <div class="modal-container glass-card" style="max-width: 500px; padding: 2rem; overflow: visible;">
+            <header class="modal-header">
+                <h3 style="font-size: 1.3rem; font-weight: 700;"><i data-lucide="calendar" style="vertical-align:middle; margin-right:4px;"></i> Book Patient Appointment</h3>
+                <button type="button" class="btn-close" id="btn-appt-close">
+                    <i data-lucide="x"></i>
+                </button>
+            </header>
+            
+            <form id="appointment-form" style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                <!-- Patient Selector Autocomplete inside Modal -->
+                <div class="form-group" style="position: relative;">
+                    <label>Patient Selection <span class="required">*</span></label>
+                    <div class="search-box" style="margin: 0; width: 100%;">
+                        <i data-lucide="search" class="search-icon" style="top: 50%; transform: translateY(-50%);"></i>
+                        <input type="text" id="appt-patient-input" placeholder="Search patient name..." autocomplete="off" required style="width:100%; padding-left: 2.25rem;">
+                        <input type="hidden" id="appt-patient-id">
+                        <button type="button" id="appt-patient-clear-btn" class="search-clear-btn hidden" style="right: 8px;">
+                            <i data-lucide="x"></i>
+                        </button>
+                    </div>
+                    <div id="appt-patient-results" class="hidden" style="position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #FFFFFF; border: 1px solid 1px solid #D1D5DB; border-radius: var(--radius-md); box-shadow: 0 10px 30px rgba(0,0,0,0.1); backdrop-filter: blur(16px); z-index: 100; max-height: 180px; overflow-y: auto;">
+                        <!-- Results populated dynamically -->
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label for="appt-date">Appointment Date <span class="required">*</span></label>
+                        <input type="date" id="appt-date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="appt-time">Time Slot <span class="required">*</span></label>
+                        <select id="appt-time" required>
+                            <option value="08:00">08:00 AM</option>
+                            <option value="09:00">09:00 AM</option>
+                            <option value="10:00">10:00 AM</option>
+                            <option value="11:00">11:00 AM</option>
+                            <option value="12:00">12:00 PM</option>
+                            <option value="13:00">01:00 PM</option>
+                            <option value="14:00">02:00 PM</option>
+                            <option value="15:00">03:00 PM</option>
+                            <option value="16:00">04:00 PM</option>
+                            <option value="17:00">05:00 PM</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label for="appt-visit-type">Visit Type <span class="required">*</span></label>
+                        <select id="appt-visit-type" required>
+                            <option value="consultation">Consultation</option>
+                            <option value="followup">Follow-up</option>
+                            <option value="procedure">Procedure</option>
+                            <option value="urgent">Urgent Care</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="appt-provider">Clinician / Provider <span class="required">*</span></label>
+                        <select id="appt-provider" required>
+                            <option value="Dr. Sarah Jenkins">Dr. Sarah Jenkins, MD</option>
+                            <option value="Dr. Alex Rivera">Dr. Alex Rivera, MD</option>
+                            <option value="Dr. Keith Campbell">Dr. Keith Campbell, FACP</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="appt-reason">Reason for Visit</label>
+                    <textarea id="appt-reason" placeholder="Describe symptoms or clinical indications..." style="width: 100%; height: 60px; background: #F3F4F6; border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: 0.5rem; font-family: var(--font-sans); color: #111827; font-size: 0.85rem; outline: none; resize: none;"></textarea>
+                </div>
+                
+                <footer class="modal-footer" style="margin-top: 0.5rem;">
+                    <button type="button" class="btn btn-secondary" id="btn-appt-cancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btn-appt-submit">
+                        <i data-lucide="check"></i>
+                        <span>Confirm Appointment</span>
+                    </button>
+                </footer>
+            </form>
+        </div>
+    </div>
+
+    <!-- Daily Agenda Modal (Selected Day Popup) -->
+    <div id="agenda-modal" class="modal-backdrop hidden">
+        <div class="modal-container glass-card" style="max-width: 450px; padding: 2rem;">
+            <header class="modal-header" style="border-bottom: 1px solid var(--border-default); padding-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <i data-lucide="clock" style="color: var(--primary); width: 20px; height: 20px;"></i>
+                    <h3 id="modal-agenda-date-title" style="font-size: 1.15rem; font-weight: 700; text-transform: uppercase;">DAILY SCHEDULE</h3>
+                </div>
+                <button type="button" class="btn-close" id="btn-agenda-close">
+                    <i data-lucide="x"></i>
+                </button>
+            </header>
+            
+            <div id="modal-agenda-items-list" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.5rem; overflow-y: auto; max-height: 400px; padding-right: 4px;">
+                <!-- Populated dynamically in JS -->
+            </div>
+            
+            <footer class="modal-footer" style="margin-top: 1.5rem; border-top: 1px solid var(--border-default); padding-top: 1rem; display: flex; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" id="btn-agenda-ok">Close</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="toast-container"></div></div>
+
+    <!-- Application Logic -->
+    <script src="/app.js"></script>
+</body>
+</html>
